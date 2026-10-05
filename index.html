@@ -21,6 +21,7 @@
       <label>單杯原價<div class="field"><input id="price" type="number" min="0.01" step="0.01" value="75" inputmode="decimal"><span>元</span></div></label>
     </div>
     <p class="error" id="error" role="alert" hidden></p>
+    <p id="save-status" style="font-size:12px;margin-top:16px" role="status">輸入會自動儲存在此瀏覽器，下次開啟可接著調整。</p>
   </section>
   <section class="panel" aria-labelledby="usage-title">
     <div class="usage-head"><h2 id="usage-title">到期時，已喝了幾杯？</h2><div class="count"><span id="used-count">9</span> <small>杯已喝</small></div></div>
@@ -40,6 +41,29 @@
 <script>
   'use strict';
   const $ = id => document.getElementById(id);
+  const storageKey = 'coffee-expiry-calculator:v1';
+  function validPlan(total, paid, price) {
+    return Number.isInteger(total) && total >= 1 && total <= 100000 && Number.isFinite(paid) && paid >= 0 && Number.isFinite(price) && price > 0 && Number.isFinite(total * price);
+  }
+  function restore() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey));
+      if (!saved || !validPlan(saved.total, saved.paid, saved.price) || !Number.isInteger(saved.used) || saved.used < 0 || saved.used > saved.total) return;
+      for (const id of ['total','paid','price']) $(id).value = saved[id];
+      $('used').max = saved.total;
+      $('used').value = saved.used;
+    } catch (_) { /* Unavailable storage or invalid saved data must not interrupt calculation. */ }
+  }
+  function save() {
+    const saved = Object.fromEntries(['total','paid','price','used'].map(id => [id, Number($(id).value)]));
+    if (['total','paid','price'].some(id => $(id).value === '') || !validPlan(saved.total, saved.paid, saved.price)) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(saved));
+      $('save-status').textContent = '已自動儲存在此瀏覽器，下次開啟可接著調整。換裝置或清除瀏覽器資料後不會保留。';
+    } catch (_) {
+      $('save-status').textContent = '此瀏覽器目前無法儲存，計算仍可正常使用。';
+    }
+  }
   const money = n => 'NT$ ' + n.toLocaleString('zh-TW', {minimumFractionDigits:2, maximumFractionDigits:2});
   function calculate(total, paid, price, used) {
     const usedValue = used * price;
@@ -69,8 +93,9 @@
     else if (t > total) $('boundary').textContent = `此方案在全部喝完 ${total} 杯時，依本公式仍有 ${money(Math.max(0, paid-total*price))} 可退款；杯數範圍內沒有退款歸零的分界。`;
     else $('boundary').textContent = `喝到第 ${t} 杯時，已使用原價金額 ${money(t*price)} 達到原本支付金額，退款歸零；此時還剩 ${total-t} 杯。喝 ${t-1} 杯時，仍可退 ${money(Math.max(0, paid-(t-1)*price))}。`;
   }
-  for (const id of ['total','paid','price','used']) $(id).addEventListener('input', render);
-  $('reset').addEventListener('click', () => { $('total').value=16; $('paid').value=750; $('price').value=75; $('used').max=16; $('used').value=9; render(); });
+  for (const id of ['total','paid','price','used']) $(id).addEventListener('input', () => { render(); save(); });
+  $('reset').addEventListener('click', () => { $('total').value=16; $('paid').value=750; $('price').value=75; $('used').max=16; $('used').value=9; render(); save(); });
+  restore();
   render();
 </script>
 </body>
